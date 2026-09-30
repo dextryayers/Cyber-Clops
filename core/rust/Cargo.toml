@@ -1,0 +1,36 @@
+[package]
+name = "clops-core"
+version = "0.1.0"
+edition = "2021"
+description = "Cyber-Clops core: jobs, scope, scan engines, store, accel detect"
+license = "MIT"
+
+[lib]
+name = "clops_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+regex = "1"
+md5 = "0.7"
+md4 = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-manual-roots", "json"] }
+hickory-resolver = { version = "0.24", features = ["tokio"] }
+anyhow = "1"
+thiserror = "2"
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+jsonwebtoken = { version = "9", default-features = false }
+x509-parser = "0.16"
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -180,3 +180,57 @@ pub async fn scan_many_refined(
   }
   out
 }
+
+// Rated variant. Same probes as scan_many, but dispatch gate spaces probe
+// starts at 1000/rate_rps ms apart. Zero means unlimited and behaves
+// exactly like scan_many.
+pub async fn scan_many_rated(
+  host: &str,
+  ports: &[u16],
+  timeout_ms: u64,
+  concurrency: usize,
+  rate_rps: u32,
+) -> Vec<PortFinding> {
+  use tokio::sync::Semaphore;
+  use std::sync::Arc;
+  let sem = Arc::new(Semaphore::new(concurrency.max(1)));
+  let gate = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
+  let interval_ms: u64 = if rate_rps == 0 { 0 } else { (1000u64 / rate_rps.max(1) as u64).max(1) };
+  let mut handles = Vec::new();
+  for &p in ports {
+    let h = host.to_string();
+    let s = sem.clone();
+    let g = gate.clone();
+    handles.push(tokio::spawn(async move {
+      let _permit = s.acquire_owned().await.unwrap();
+      if interval_ms > 0 {
+        loop {
+          let wait = {
+            let mut last = g.lock().unwrap();
+            let now = std::time::Instant::now();
+            let next = *last + std::time::Duration::from_millis(interval_ms);
+            if now >= next {
+              *last = now;
+              None
+            } else {
+              Some(next - now)
+            }
+          };
+          match wait {
+            None => break,
+            Some(d) => tokio::time::sleep(d).await,
+          }
+        }
+      }
+      scan_one(&h, p, timeout_ms).await
+    }));
+  }
+  let mut out = Vec::new();
+  for h in handles {
+    if let Ok(f) = h.await {
+      out.push(f);
+    }
+  }
+  out.sort_by_key(|f| f.port);
+  out
+}

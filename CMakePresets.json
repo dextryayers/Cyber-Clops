@@ -11,7 +11,9 @@
         "CL_OPS_ENABLE_CUDA": "OFF",
         "CL_OPS_ENABLE_HIP": "OFF",
         "CL_OPS_ENABLE_OPENCL": "ON",
-        "CL_OPS_BUILD_GUI": "ON"
+        "CL_OPS_BUILD_GUI": "ON",
+        "SDL_X11_XSCRNSAVER": "OFF",
+        "FETCHCONTENT_UPDATES_DISCONNECTED": "ON"
       }
     },
     {

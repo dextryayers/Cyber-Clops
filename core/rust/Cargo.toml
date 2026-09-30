@@ -46,3 +46,8 @@ x509-parser = "0.16"
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+# Slim dev profile so the in repo target dir fits small disks.
+# Dependencies build without debuginfo, our crate keeps it.
+[profile.dev.package."*"]
+debug = false

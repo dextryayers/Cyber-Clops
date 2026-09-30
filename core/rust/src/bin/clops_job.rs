@@ -73,9 +73,12 @@ async fn main() {
       let ports = parse_ports(a.get("ports").map(|s| s.as_str()).unwrap_or("80,443"));
       let timeout: u64 = a.get("timeout").and_then(|s| s.parse().ok()).unwrap_or(2000);
       let conc: usize = a.get("concurrency").and_then(|s| s.parse().ok()).unwrap_or(100);
+      let rate: u32 = a.get("rate").and_then(|s| s.parse().ok()).unwrap_or(0);
       let refine = a.contains_key("refine");
       let out = if refine {
         clops_core::scan::scan_many_refined(&host, &ports, timeout, conc, 4).await
+      } else if rate > 0 {
+        clops_core::scan::scan_many_rated(&host, &ports, timeout, conc, rate).await
       } else {
         clops_core::scan::scan_many(&host, &ports, timeout, conc).await
       };
@@ -126,7 +129,19 @@ async fn main() {
       };
       let conc: usize = a.get("concurrency").and_then(|s| s.parse().ok()).unwrap_or(20);
       let timeout: u64 = a.get("timeout").and_then(|s| s.parse().ok()).unwrap_or(5000);
-      let out = clops_core::dirbrute::brute(&base, &words, conc, timeout, 0).await;
+      let rate: u32 = a.get("rate").and_then(|s| s.parse().ok()).unwrap_or(0);
+      let out = if rate > 0 {
+        clops_core::dirbrute::brute_advanced(
+          &base,
+          &words,
+          conc,
+          timeout,
+          clops_core::dirbrute::BruteOptions { rate_rps: rate, ..Default::default() },
+        )
+        .await
+      } else {
+        clops_core::dirbrute::brute(&base, &words, conc, timeout, 0).await
+      };
       for f in &out {
         println!("{}", serde_json::to_string(f).unwrap());
       }

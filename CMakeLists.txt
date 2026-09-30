@@ -95,6 +95,7 @@ if(CL_OPS_BUILD_GUI)
     apps/gui/main.cpp
     apps/gui/panels.cpp
     apps/gui/table_view.cpp
+    apps/gui/theme.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp

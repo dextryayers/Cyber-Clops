@@ -31,11 +31,12 @@ pub struct BruteOptions {
   pub extensions: Vec<String>,
   pub status_allow: Vec<u16>,
   pub start_offset: usize,
+  pub rate_rps: u32,
 }
 
 impl Default for BruteOptions {
   fn default() -> Self {
-    Self { extensions: Vec::new(), status_allow: Vec::new(), start_offset: 0 }
+    Self { extensions: Vec::new(), status_allow: Vec::new(), start_offset: 0, rate_rps: 0 }
   }
 }
 
@@ -79,6 +80,10 @@ pub async fn brute_advanced(
   use tokio::sync::Semaphore;
   use std::sync::Arc;
   let sem = Arc::new(Semaphore::new(concurrency.max(1).min(500)));
+  // Honest rate cap. A shared dispatch gate spaces request starts at
+  // 1000/rate_rps ms apart. Zero means unlimited.
+  let gate = Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
+  let interval_ms: u64 = if opts.rate_rps == 0 { 0 } else { (1000 / opts.rate_rps.max(1) as u64).max(1) };
   // Expand extensions before fanout so checkpoint math stays on words.
   let mut expanded: Vec<(usize, String)> = Vec::new();
   for (idx, w) in words.iter().enumerate() {
@@ -98,11 +103,31 @@ pub async fn brute_advanced(
     let b = base.to_string();
     let c = client.clone();
     let s = sem.clone();
+    let g = gate.clone();
     let lens_c = lens.clone();
     let hashes_c = hashes.clone();
     let allow = opts.status_allow.clone();
     handles.push(tokio::spawn(async move {
       let _p = s.acquire_owned().await.unwrap();
+      if interval_ms > 0 {
+        loop {
+          let wait = {
+            let mut last = g.lock().unwrap();
+            let now = std::time::Instant::now();
+            let next = *last + std::time::Duration::from_millis(interval_ms);
+            if now >= next {
+              *last = now;
+              None
+            } else {
+              Some(next - now)
+            }
+          };
+          match wait {
+            None => break,
+            Some(d) => tokio::time::sleep(d).await,
+          }
+        }
+      }
       let url = format!("{}/{w}", b.trim_end_matches('/'));
       let t0 = std::time::Instant::now();
       let resp = c.get(&url).send().await;

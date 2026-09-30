@@ -11,25 +11,24 @@ Prerequisites: CMake 3.24 plus, Ninja, Rust stable, Go 1.22 plus, X11 and GL dev
 # 1. Enter the project
 cd /home/aniippxploit/Cyber-Clops
 
-# 2. Build the engines once. Output goes to /tmp so home stays clean.
-export CARGO_TARGET_DIR=/tmp/opencode/clops-target
+# 2. Build the engines once. Output lives in ./target inside the repo.
 cargo build -p clops-core --bins
-go -C workers/go build -o /tmp/opencode/clops-worker ./...
+go -C workers/go build -o ../../build/clops-worker ./...
 
 # 3. Put the engine binaries on PATH so the GUI Run buttons find them.
-export PATH=/tmp/opencode/clops-target/debug:$PATH
+export PATH="$PWD/target/debug:$PATH"
 
 # 4. Configure and build the GUI. SDL3 and ImGui fetch automatically.
-cmake -S . -B /tmp/opencode/clops-build-gui -G Ninja \
+cmake -S . -B ./build/dev -G Ninja \
   -DCL_OPS_BUILD_GUI=ON \
   -DSDL_X11_XSCRNSAVER=OFF \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build /tmp/opencode/clops-build-gui -j
+cmake --build ./build/dev -j
 
 # 5. Open it. On a desktop just run the binary.
 #    On a headless server wrap it with xvfb-run.
-/tmp/opencode/clops-build-gui/clops_gui
-xvfb-run -a /tmp/opencode/clops-build-gui/clops_gui
+./build/dev/clops_gui
+xvfb-run -a ./build/dev/clops_gui
 ```
 
 First run checklist: topbar shows real CPU and backend from the accel probe, left tree lists all 25 tools in 6 groups, press Ctrl+K for the command palette, pick T03 Port Scanner, target 127.0.0.1, press Run. Open rows stream live. Stop cancels.
@@ -44,16 +43,16 @@ Troubleshooting:
 
 ```sh
 # Rust core tests, real localhost plus example.com polite checks
-export CARGO_TARGET_DIR=/tmp/opencode/clops-target
+# Build output lives in ./target inside the repo
 cargo test -p clops-core
 
 # Go worker
 go -C workers/go test ./...
 
 # Native CPU tests
-cmake -S . -B /tmp/opencode/clops-build-headless -G Ninja -DCL_OPS_BUILD_GUI=OFF
-cmake --build /tmp/opencode/clops-build-headless -j
-ctest --test-dir /tmp/opencode/clops-build-headless -V
+cmake -S . -B ./build/headless -G Ninja -DCL_OPS_BUILD_GUI=OFF
+cmake --build ./build/headless -j
+ctest --test-dir ./build/headless -V
 ```
 
 Headless without GUI:

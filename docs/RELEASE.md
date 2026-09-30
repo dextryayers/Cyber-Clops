@@ -3,12 +3,12 @@ English only. CPU first release. GPU optional.
 
 ## Build
 ```sh
-export CARGO_TARGET_DIR=/tmp/opencode/clops-target
+# Build output lives in ./target inside the repo
 cargo test -p clops-core
 go -C workers/go test ./...
-cmake -S . -B /tmp/opencode/clops-build-headless -G Ninja -DCL_OPS_BUILD_GUI=OFF
-cmake --build /tmp/opencode/clops-build-headless -j
-ctest --test-dir /tmp/opencode/clops-build-headless -V
+cmake -S . -B ./build/headless -G Ninja -DCL_OPS_BUILD_GUI=OFF
+cmake --build ./build/headless -j
+ctest --test-dir ./build/headless -V
 ```
 
 GUI build fetches SDL3 and ImGui docking automatically:

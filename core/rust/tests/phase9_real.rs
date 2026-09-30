@@ -153,7 +153,7 @@ async fn tls_chain_len_real() {
 async fn dirbrute_extensions_real() {
   let base = start_raw(vec![("/admin.php".to_string(), b"admin php".to_vec(), "Server: T\r\n".to_string())]).await;
   let words = vec!["admin".to_string(), "nope999".to_string()];
-  let opts = clops_core::dirbrute::BruteOptions { extensions: vec!["php".to_string()], status_allow: vec![200], start_offset: 0 };
+  let opts = clops_core::dirbrute::BruteOptions { extensions: vec!["php".to_string()], status_allow: vec![200], start_offset: 0, rate_rps: 0 };
   let found = clops_core::dirbrute::brute_advanced(&base, &words, 4, 3000, opts).await;
   assert!(found.iter().any(|f| f.path == "/admin.php"), "must find with extension, got {found:?}");
 }
@@ -471,4 +471,22 @@ fn pcap_fixture_file_real() {
   assert_eq!(flows.len(), 2);
   assert!(flows.iter().any(|f| f.proto == "TCP" && f.dport == 80));
   assert!(flows.iter().any(|f| f.summary.contains("lab.example.com")), "got {flows:?}");
+}
+
+#[tokio::test]
+async fn dirbrute_rate_cap_real() {
+  let base = start_raw(vec![
+    ("/w1".to_string(), b"one".to_vec(), "Server: T\r\n".to_string()),
+    ("/w2".to_string(), b"two".to_vec(), "Server: T\r\n".to_string()),
+    ("/w3".to_string(), b"three".to_vec(), "Server: T\r\n".to_string()),
+    ("/w4".to_string(), b"four".to_vec(), "Server: T\r\n".to_string()),
+  ])
+  .await;
+  let words = vec!["w1".to_string(), "w2".to_string(), "w3".to_string(), "w4".to_string()];
+  let opts = clops_core::dirbrute::BruteOptions { extensions: vec![], status_allow: vec![], start_offset: 0, rate_rps: 4 };
+  let t0 = std::time::Instant::now();
+  let found = clops_core::dirbrute::brute_advanced(&base, &words, 4, 3000, opts).await;
+  let dt = t0.elapsed().as_millis();
+  assert_eq!(found.len(), 4, "all paced requests must land, got {found:?}");
+  assert!(dt >= 600, "4 reqs at 4 rps need 3 gaps of 250 ms, took {dt} ms");
 }

@@ -25,7 +25,9 @@ int main() {
 
   // MD5("abc") = 900150983cd24fb0d6963f7d28e17f72
   unsigned char md5[16];
-  assert(clops_md5_once((const unsigned char*)"abc", 3, md5) == 0);
+  // Calls stay outside assert. NDEBUG strips assert bodies.
+  int md5_rc = clops_md5_once((const unsigned char*)"abc", 3, md5);
+  assert(md5_rc == 0);
   char hex[33];
   hex_of(md5, 16, hex);
   assert(strcmp(hex, "900150983cd24fb0d6963f7d28e17f72") == 0);
@@ -33,7 +35,8 @@ int main() {
 
   // SHA256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
   unsigned char sha[32];
-  assert(clops_sha256_once((const unsigned char*)"abc", 3, sha) == 0);
+  int sha_rc = clops_sha256_once((const unsigned char*)"abc", 3, sha);
+  assert(sha_rc == 0);
   char hex64[65];
   hex_of(sha, 32, hex64);
   assert(strcmp(hex64, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad") == 0);
@@ -45,18 +48,21 @@ int main() {
   printf("native_test: bench MD5=%lu H/s SHA256=%lu H/s\n", mhs, shs);
 
   char brand[64];
-  assert(clops_cpu_brand(brand, sizeof(brand)) == 0 && brand[0] != 0);
+  // NOTE: never hide the call inside assert. NDEBUG builds strip assert
+  // bodies, which would skip the call and leave the buffer uninitialized.
+  int brand_rc = clops_cpu_brand(brand, sizeof(brand));
+  assert(brand_rc == 0 && brand[0] != 0);
   printf("native_test: CPU brand=%s\n", brand);
 
   char svc[32], ver[128];
-  assert(clops_identify_service("SSH-2.0-OpenSSH_9.2 lab\r\n", 22, svc, sizeof(svc), ver, sizeof(ver)) == 0);
-  assert(strcmp(svc, "ssh") == 0);
-  assert(clops_identify_service("220 lab ftp ready\r\n", 21, svc, sizeof(svc), ver, sizeof(ver)) == 0);
-  assert(strcmp(svc, "ftp-or-smtp") == 0);
-  assert(clops_identify_service("", 80, svc, sizeof(svc), ver, sizeof(ver)) == 0);
-  assert(strcmp(svc, "http") == 0);
-  assert(clops_identify_service("", 9999, svc, sizeof(svc), ver, sizeof(ver)) == 0);
-  assert(strcmp(svc, "unknown") == 0);
+  int rc1 = clops_identify_service("SSH-2.0-OpenSSH_9.2 lab\r\n", 22, svc, sizeof(svc), ver, sizeof(ver));
+  assert(rc1 == 0 && strcmp(svc, "ssh") == 0);
+  int rc2 = clops_identify_service("220 lab ftp ready\r\n", 21, svc, sizeof(svc), ver, sizeof(ver));
+  assert(rc2 == 0 && strcmp(svc, "ftp-or-smtp") == 0);
+  int rc3 = clops_identify_service("", 80, svc, sizeof(svc), ver, sizeof(ver));
+  assert(rc3 == 0 && strcmp(svc, "http") == 0);
+  int rc4 = clops_identify_service("", 9999, svc, sizeof(svc), ver, sizeof(ver));
+  assert(rc4 == 0 && strcmp(svc, "unknown") == 0);
   printf("native_test: svc_probe OK\n");
 
   // scan.h links: banner grab against closed port must not crash

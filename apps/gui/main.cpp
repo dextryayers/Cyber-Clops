@@ -10,6 +10,19 @@
 #include <cstdio>
 #include <cstring>
 
+namespace ClopsFonts {
+void* ui = nullptr;
+void* ui_bold = nullptr;
+void* mono = nullptr;
+}
+
+static void* try_font(ImGuiIO& io, const char* path, float size) {
+  FILE* f = std::fopen(path, "rb");
+  if (!f) return nullptr;
+  std::fclose(f);
+  return (void*)io.Fonts->AddFontFromFileTTF(path, size);
+}
+
 static std::string run_capture(const char* cmd) {
   std::string out;
   FILE* p = popen(cmd, "r");
@@ -75,12 +88,21 @@ int main(int, char**) {
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable;
-  ImGui::StyleColorsDark();
+  ClopsFonts::ui = try_font(io, "/usr/share/fonts/opentype/inter/Inter-Regular.otf", 15.0f);
+  ClopsFonts::ui_bold = try_font(io, "/usr/share/fonts/opentype/inter/Inter-Medium.otf", 15.0f);
+  ClopsFonts::mono = try_font(io, "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 14.0f);
+  apply_ops_theme();
   ImGui_ImplSDL3_InitForOpenGL(win, gl);
   ImGui_ImplOpenGL3_Init("#version 130");
 
   AppState st;
   st.accel_text = load_accel();
+  {
+    // Short backend label for metric strips. Parsed from the same probe JSON.
+    std::string body = run_capture("clops-accel-probe 2>/dev/null");
+    std::string be = json_str(body, "backend");
+    st.backend = be.empty() ? "CPU" : be;
+  }
   {
     std::lock_guard<std::mutex> lk(st.mu);
     st.logs.push_back("Ready. Scope: lab-only. Safe Mode: ON.");
@@ -97,21 +119,31 @@ int main(int, char**) {
         const SDL_KeyboardEvent& k = e.key;
         bool ctrl = (k.mod & SDL_KMOD_CTRL) != 0;
         if (ctrl && k.key == SDLK_K) st.palette_open = !st.palette_open;
-        if (ctrl && k.key == SDLK_RETURN) run_tool(st, st.active);
+        if (ctrl && k.key == SDLK_RETURN) {
+          if (st.active_tab >= 0 && st.active_tab < (int)st.pages.size())
+            run_tool(st, st.pages[st.active_tab].tool_idx);
+          else
+            run_tool(st, st.active);
+        }
         if (ctrl && k.key == SDLK_PERIOD) stop_jobs(st);
+        if (k.key == SDLK_ESCAPE) {
+          st.palette_open = false;
+          st.show_settings = false;
+          st.show_scope_dialog = false;
+        }
       }
     }
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
     ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-
     panels_draw_topbar(st);
     panels_draw_left_tree(st);
     panels_draw_center(st);
     panels_draw_inspector(st);
     panels_draw_bottom(st);
     panels_draw_palette(st);
+    panels_draw_overlays(st);
 
     ImGui::Render();
     int w = 0, h = 0;

@@ -6,7 +6,8 @@ Every number below was measured on this host. Targets are marked as targets.
 | Backend | MD5 H/s | SHA256 H/s |
 |---------|---------|------------|
 | Rust pure, accel probe | 996940 | 237975 |
-| C++ scalar, native test | 2242560 | 993280 |
+| C++ scalar, native test -O0 | 2242560 | 1013760 |
+| C++ scalar, native test -O2 | 8294400 | 4556800 |
 | CUDA | not present, dispatcher falls back honestly | |
 | OpenCL POCL | 1 platform detected, kernels land in Phase 6 | |
 
@@ -35,9 +36,9 @@ Every number below was measured on this host. Targets are marked as targets.
 
 ## How to re measure
 ```sh
-export CARGO_TARGET_DIR=/tmp/opencode/clops-target
+# Build output lives in ./target inside the repo
 cargo build -p clops-core --bins
-/tmp/opencode/clops-target/debug/clops-accel-probe
-time /tmp/opencode/clops-target/debug/clops-job scan --host 127.0.0.1 --ports 55000-55099 --timeout 300 --concurrency 50
-ctest --test-dir /tmp/opencode/clops-build-headless -V
+./target/debug/clops-accel-probe
+time ./target/debug/clops-job scan --host 127.0.0.1 --ports 55000-55099 --timeout 300 --concurrency 50
+ctest --test-dir ./build/headless -V
 ```

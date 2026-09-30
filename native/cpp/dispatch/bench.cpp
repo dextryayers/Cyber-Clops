@@ -5,6 +5,7 @@
 #include <string.h>
 #include <cstdio>
 #include <chrono>
+#include <cpuid.h>
 
 namespace {
 
@@ -169,6 +170,11 @@ void sha256_once(const uint8_t* msg, size_t len, uint8_t out[32]) {
 
 }  // namespace
 
+// Volatile sink so the optimizer cannot delete the bench loop.
+// Without this, -O2 proves the digests are unobserved and the bench
+// degenerates into a counter loop with fantasy H/s numbers.
+static volatile uint32_t g_sink;
+
 extern "C" {
 
 unsigned long clops_bench_md5_hs(int ms_budget) {
@@ -181,6 +187,7 @@ unsigned long clops_bench_md5_hs(int ms_budget) {
   for (;;) {
     uint32_t s[4] = {st[0], st[1], st[2], st[3]};
     md5_compress(s, blk);
+    g_sink ^= s[0] ^ s[1] ^ s[2] ^ s[3];
     blk[0]++;
     n++;
     if ((n & 1023) == 0) {
@@ -204,6 +211,7 @@ unsigned long clops_bench_sha256_hs(int ms_budget) {
     uint32_t s[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
                      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
     sha256_compress(s, blk);
+    g_sink ^= s[0] ^ s[4] ^ s[7];
     blk[0]++;
     n++;
     if ((n & 1023) == 0) {
@@ -233,11 +241,15 @@ int clops_cpu_brand(char* out, int out_cap) {
   if (!out || out_cap <= 0) return -1;
 #if defined(__x86_64__) || defined(_M_X64)
 #if defined(__GNUC__) || defined(__clang__)
-  unsigned int regs[12] = {0};
+  if (__get_cpuid_max(0x80000000u, 0) < 0x80000004u) {
+    snprintf(out, (size_t)out_cap, "x86_64");
+    return 0;
+  }
+  unsigned int regs[12];
   unsigned int* p = regs;
-  for (int leaf = (int)0x80000002; leaf <= (int)0x80000004; leaf++) {
+  for (unsigned int leaf = 0x80000002u; leaf <= 0x80000004u; leaf++) {
     unsigned int a, b, c, d;
-    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf), "c"(0));
+    __get_cpuid_count(leaf, 0, &a, &b, &c, &d);
     *p++ = a;
     *p++ = b;
     *p++ = c;

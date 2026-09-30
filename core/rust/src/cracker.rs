@@ -166,3 +166,53 @@ pub fn mask_attack(algo: &str, target: &str, mask: &str, max_keys: u64) -> Crack
   let ms = start.elapsed().as_millis().max(1) as u64;
   CrackStats { password: None, tested, hs: tested * 1000 / ms, backend, algo: algo.into() }
 }
+
+// Rule transforms applied per dictionary word before compare.
+// Rules: lower, upper, capitalize, leet, append 123, append year.
+pub fn apply_rules(word: &str) -> Vec<String> {
+  let mut out = vec![word.to_string()];
+  out.push(word.to_lowercase());
+  out.push(word.to_uppercase());
+  let mut cap = word.to_lowercase();
+  if let Some(c) = cap.get_mut(0..1) {
+    c.make_ascii_uppercase();
+  }
+  out.push(cap);
+  out.push(word.replace('a', "4").replace('e', "3").replace('o', "0").replace('i', "1"));
+  out.push(format!("{word}123"));
+  out.push(format!("{word}2024"));
+  out.sort();
+  out.dedup();
+  out
+}
+
+// Hybrid attack: dictionary words plus 2 digit suffix 00 to 99.
+// Bounded and honest. max_words caps the dictionary side.
+pub fn hybrid_attack(algo: &str, target: &str, words: &[String], max_words: usize) -> CrackStats {
+  let backend = backend_label();
+  let t = target.trim().to_lowercase();
+  let start = std::time::Instant::now();
+  let mut tested: u64 = 0;
+  for w in words.iter().take(max_words) {
+    for cand in apply_rules(w.trim_end()) {
+      for suffix in 0..100u32 {
+        let guess = format!("{cand}{suffix:02}");
+        tested += 1;
+        if let Some(h) = hash_one(algo, &guess) {
+          if h == t {
+            let ms = start.elapsed().as_millis().max(1) as u64;
+            return CrackStats {
+              password: Some(guess),
+              tested,
+              hs: tested * 1000 / ms,
+              backend,
+              algo: algo.into(),
+            };
+          }
+        }
+      }
+    }
+  }
+  let ms = start.elapsed().as_millis().max(1) as u64;
+  CrackStats { password: None, tested, hs: tested * 1000 / ms, backend, algo: algo.into() }
+}

@@ -340,29 +340,29 @@ Settings dialog sections: General, Scope, Network, Acceleration, AI Provider, St
 
 Goal: aggregate without key, then validate by resolve.
 
-22 sources without key:
-1. crt.sh JSON
+22 sources without key, verified live 2026-09-30. Dead endpoints were replaced, see notes:
+1. crt.sh JSON wildcard plus exact query variant as two slots
 2. Hackertarget hostsearch
-3. Anubis DB mirror
+3. Anubis DB mirror, best effort, Cloudflare challenged
 4. RapidDNS scrape
-5. URLScan public search
+5. URLScan public search, task plus page URL and domain parsed
 6. CertSpotter public API
-7. DigiCert CT log
-8. Google Transparency CT
-9. CT mirror crackwatch style
-10. ThreatCrowd mirror
+7. Entrust CT search, best effort
+8. Second Common Crawl snapshot instead of retired ThreatCrowd
+9. OTX passive DNS, throttled, best effort with retry
+10. Netcraft light scrape, best effort, 403 guarded
 11. AlienVault OTX web low rate
-12. Netcraft light scrape
-13. DNSDumpster scrape
+12. Unused slot retired, see NSEC walk below
+13. DNSDumpster scrape, session based, stub kept for contract
 14. Local DNS brute with built in list
 15. Permutation: dev, staging, test, qa, uat, api, admin, beta, internal, prod
 16. SAN feedback from T04
 17. PTR sweep for small in scope ranges
-18. CNAME fingerprint list
+18. CNAME guess resolve for cdn static media assets docs auth sso
 19. Wayback CDX hosts
-20. Common Crawl index hosts
-21. OTX plus URLScan relation graph
-22. Anubis brute public endpoint
+20. Common Crawl index hosts, two snapshots as two slots
+21. subdomain.center public API plus findsubdomains scrape
+22. NSEC zone walk via real DNS instead of retired bufferover
 
 Pipeline: parallel fetch 12 sec timeout, 1 retry, lowercase normalize, wildcard probe with random token, resolve A, AAAA, CNAME with system plus DoH fallback, dedupe, tag source per entry.
 Output columns: Subdomain, IP, CNAME, Source, Resolved, First seen.
@@ -694,9 +694,11 @@ Cyber-Clops/
   plan.md
   README.md
   CMakeLists.txt
-  apps/gui/                 # C++ ImGui shell
+  apps/gui/                 # C++ ImGui shell, 25 tools, Cmd+K palette, live jobs
   core/rust/                # orchestrator, engines, store, accel.rs
     src/accel.rs            # dispatcher client, bench, pick
+    src/bin/clops_job.rs    # CLI runner: resolve scan fetch tls dirbrute crack-dict codec
+    src/bin/accel_probe.rs  # accel badge JSON for GUI topbar
     migrations/
   native/cpp/               # scalar + simd + dispatch host
     simd/

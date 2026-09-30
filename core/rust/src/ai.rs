@@ -82,3 +82,29 @@ pub async fn ollama_models(timeout_ms: u64) -> Vec<String> {
   }
   vec![]
 }
+
+// Run log for audit and replay. One entry per executed step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunEntry {
+  pub tool: String,
+  pub target: String,
+  pub approved: bool,
+  pub at: String,
+}
+
+pub fn log_step(plan_log: &mut Vec<RunEntry>, step: &AiStep, approved: bool) {
+  plan_log.push(RunEntry {
+    tool: step.tool.clone(),
+    target: step.target.clone(),
+    approved,
+    at: chrono::Utc::now().to_rfc3339(),
+  });
+}
+
+// Replay renders a stored log as human readable lines. No packets sent.
+pub fn replay(log: &[RunEntry]) -> Vec<String> {
+  log.iter()
+    .enumerate()
+    .map(|(i, e)| format!("{}. {} on {} approved={}", i + 1, e.tool, e.target, e.approved))
+    .collect()
+}

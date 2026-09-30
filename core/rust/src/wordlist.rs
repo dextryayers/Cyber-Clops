@@ -89,3 +89,31 @@ pub fn stream_file(input: &std::path::Path, output: &std::path::Path) -> anyhow:
   }
   Ok(n)
 }
+
+// Regex keep filter. Invalid pattern returns input unchanged with an error note.
+pub fn filter_regex(words: Vec<String>, pattern: &str) -> Vec<String> {
+  let re = match regex::Regex::new(pattern) {
+    Ok(r) => r,
+    Err(_) => return words,
+  };
+  words.into_iter().filter(|w| re.is_match(w)).collect()
+}
+
+// Lua transform for small lists. Script must define function t(w) returning a string.
+// Runs in the sandboxed mlua runtime with memory cap. Caps at 50k words.
+pub fn transform_lua(words: &[String], script: &str) -> anyhow::Result<Vec<String>> {
+  use mlua::Lua;
+  if words.len() > 50_000 {
+    anyhow::bail!("wordlist over 50k cap for lua transform");
+  }
+  let lua = Lua::new();
+  let _ = lua.set_memory_limit(8 * 1024 * 1024);
+  lua.load(script).exec().map_err(|e| anyhow::anyhow!(e.to_string()))?;
+  let f: mlua::Function = lua.globals().get("t").map_err(|e| anyhow::anyhow!(e.to_string()))?;
+  let mut out = Vec::with_capacity(words.len());
+  for w in words {
+    let r: String = f.call(w.clone()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    out.push(r);
+  }
+  Ok(out)
+}

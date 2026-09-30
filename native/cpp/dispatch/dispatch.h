@@ -34,6 +34,17 @@ int clops_has_cuda_runtime(void);
 // Returns platform count, or 0 if none, or negative if loader missing.
 int clops_opencl_platform_count(void);
 
+// Throughput bench of the scalar core. Returns hashes per second.
+unsigned long clops_bench_md5_hs(int ms_budget);
+unsigned long clops_bench_sha256_hs(int ms_budget);
+
+// One shot digests for short messages under 64 bytes. Returns 0 on success.
+int clops_md5_once(const unsigned char* msg, int len, unsigned char out16[16]);
+int clops_sha256_once(const unsigned char* msg, int len, unsigned char out32[32]);
+
+// CPU brand string. Returns 0 on success.
+int clops_cpu_brand(char* out, int out_cap);
+
 // Free for JSON strings allocated by Rust FFI.
 void clops_free(char* p);
 

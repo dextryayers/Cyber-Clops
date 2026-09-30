@@ -78,7 +78,37 @@ pub async fn run(
       let method = parts.next().unwrap_or("GET").to_string();
       let target = parts.next().unwrap_or("/").to_string();
       if method.to_uppercase() == "CONNECT" {
-        let _ = s.write_all(b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 23\r\n\r\nCONNECT not in v1 proxy").await;
+        // HTTPS tunnel. Scope gate on host, then blind TCP relay.
+        // Encrypted bytes are never inspected. History records host and byte counts.
+        let authority = target.clone();
+        let host_only = authority.split(':').next().unwrap_or("").to_string();
+        if !sc.is_allowed(&host_only) {
+          let msg = "blocked: target outside scope";
+          let head = format!("HTTP/1.1 403 Forbidden\r\nContent-Length: {}\r\n\r\n", msg.len());
+          let _ = s.write_all(head.as_bytes()).await;
+          let _ = s.write_all(msg.as_bytes()).await;
+          return;
+        }
+        let upstream = if authority.contains(':') { authority.clone() } else { format!("{authority}:443") };
+        match tokio::net::TcpStream::connect(&upstream).await {
+          Ok(mut up) => {
+            let _ = s.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await;
+            let (mut ri, mut wi) = tokio::io::split(s);
+            let (mut r_up, mut w_up) = up.split();
+            let c1 = tokio::io::copy(&mut ri, &mut w_up);
+            let c2 = tokio::io::copy(&mut r_up, &mut wi);
+            let (n1, n2) = tokio::join!(c1, c2);
+            h.lock().unwrap().push(ProxyEntry {
+              method: "CONNECT".into(),
+              url: format!("{upstream}"),
+              status: 200,
+              length: n1.unwrap_or(0) + n2.unwrap_or(0),
+            });
+          }
+          Err(_) => {
+            let _ = s.write_all(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 7\r\n\r\nno route").await;
+          }
+        }
         return;
       }
       // Absolute URI expected in forward proxy mode. Fall back to Host header.

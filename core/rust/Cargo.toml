@@ -13,6 +13,10 @@ crate-type = ["cdylib", "rlib"]
 name = "clops-accel-probe"
 path = "src/bin/accel_probe.rs"
 
+[[bin]]
+name = "clops-job"
+path = "src/bin/clops_job.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

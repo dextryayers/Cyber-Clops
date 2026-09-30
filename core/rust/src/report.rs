@@ -30,9 +30,25 @@ fn esc(s: &str) -> String {
 }
 
 // HTML report, print ready CSS, English only. PDF via browser print.
+// Findings sort Critical first. Counts per severity head the table.
 pub fn to_html(project: &str, scope: &str, findings: &[ReportFinding], timeline: &[String]) -> String {
+  fn rank(s: &str) -> u8 {
+    match s.to_lowercase().as_str() {
+      "critical" => 0,
+      "high" => 1,
+      "medium" => 2,
+      "low" => 3,
+      _ => 4,
+    }
+  }
+  let mut sorted: Vec<&ReportFinding> = findings.iter().collect();
+  sorted.sort_by_key(|f| rank(&f.severity));
+  let mut counts = [0usize; 5];
+  for f in &sorted {
+    counts[rank(&f.severity).min(4) as usize] += 1;
+  }
   let mut rows = String::new();
-  for f in findings {
+  for f in sorted {
     rows.push_str(&format!(
       "<tr><td>{}</td><td>{}</td><td>{}</td><td><pre>{}</pre></td></tr>",
       esc(&f.severity),
@@ -46,12 +62,17 @@ pub fn to_html(project: &str, scope: &str, findings: &[ReportFinding], timeline:
     tl.push_str(&format!("<li>{}</li>", esc(t)));
   }
   format!(
-    "<!doctype html><html><head><meta charset=\"utf-8\"><title>{project} report</title><style>body{{font-family:Inter,Arial,sans-serif;margin:40px;color:#111}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #999;padding:8px;font-size:13px}}pre{{white-space:pre-wrap}}</style></head><body><h1>{project}</h1><p>Scope: {scope}</p><h2>Findings ({})</h2><table><tr><th>Severity</th><th>Tool</th><th>Title</th><th>Evidence</th></tr>{rows}</table><h2>Timeline</h2><ul>{tl}</ul></body></html>",
+    "<!doctype html><html><head><meta charset=\"utf-8\"><title>{project} report</title><style>body{{font-family:Inter,Arial,sans-serif;margin:40px;color:#111}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #999;padding:8px;font-size:13px}}pre{{white-space:pre-wrap}}</style></head><body><h1>{project}</h1><p>Scope: {scope}</p><p>Counts: Critical {c0} High {c1} Medium {c2} Low {c3} Info {c4}</p><h2>Findings ({})</h2><table><tr><th>Severity</th><th>Tool</th><th>Title</th><th>Evidence</th></tr>{rows}</table><h2>Timeline</h2><ul>{tl}</ul></body></html>",
     findings.len(),
     project = esc(project),
     scope = esc(scope),
     rows = rows,
-    tl = tl
+    tl = tl,
+    c0 = counts[0],
+    c1 = counts[1],
+    c2 = counts[2],
+    c3 = counts[3],
+    c4 = counts[4],
   )
 }
 

@@ -40,6 +40,55 @@ fn sample_db() -> Vec<CveEntry> {
       cvss: 7.5,
       summary: "Samba remote code exec".into(),
     },
+    CveEntry {
+      id: "CVE-2014-0160".into(),
+      service: "openssl".into(),
+      version_max: "1.0.1f".into(),
+      cvss: 7.5,
+      summary: "Heartbleed information leak".into(),
+    },
+    CveEntry {
+      id: "CVE-2019-11043".into(),
+      service: "php".into(),
+      version_max: "7.3.11".into(),
+      cvss: 9.8,
+      summary: "PHP-FPM remote code exec".into(),
+    },
+    CveEntry {
+      id: "CVE-2020-1472".into(),
+      service: "netlogon".into(),
+      version_max: "10.0".into(),
+      cvss: 10.0,
+      summary: "Zerologon privilege escalation".into(),
+    },
+    CveEntry {
+      id: "CVE-2021-44228".into(),
+      service: "log4j".into(),
+      version_max: "2.14.1".into(),
+      cvss: 10.0,
+      summary: "Log4Shell remote code exec".into(),
+    },
+    CveEntry {
+      id: "CVE-2017-0144".into(),
+      service: "smb".into(),
+      version_max: "1.0".into(),
+      cvss: 8.1,
+      summary: "EternalBlue SMB remote code exec".into(),
+    },
+    CveEntry {
+      id: "CVE-2022-22965".into(),
+      service: "spring".into(),
+      version_max: "5.3.17".into(),
+      cvss: 9.8,
+      summary: "Spring4Shell remote code exec".into(),
+    },
+    CveEntry {
+      id: "CVE-2023-38408".into(),
+      service: "openssh".into(),
+      version_max: "9.3p1".into(),
+      cvss: 9.8,
+      summary: "OpenSSH agent PKCS11 injection".into(),
+    },
   ]
 }
 

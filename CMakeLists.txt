@@ -38,8 +38,10 @@ endif()
 
 add_library(clops_native STATIC
   native/cpp/dispatch/dispatch.cpp
+  native/cpp/dispatch/bench.cpp
   native/cpp/simd/sha_scalar.cpp
   native/net/scan.c
+  native/net/svc_probe.c
 )
 
 target_include_directories(clops_native PUBLIC

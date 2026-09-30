@@ -70,3 +70,37 @@ pub fn diff(a: &str, b: &str) -> String {
   }
   out
 }
+
+// Bounded in memory history for T14. Cap 200 entries, oldest dropped.
+#[derive(Debug, Clone)]
+pub struct History {
+  entries: std::collections::VecDeque<(String, String, ReplayResult)>,
+  cap: usize,
+}
+
+impl History {
+  pub fn new() -> Self {
+    Self { entries: std::collections::VecDeque::new(), cap: 200 }
+  }
+
+  pub fn push(&mut self, method: &str, url: &str, res: ReplayResult) {
+    if self.entries.len() >= self.cap {
+      self.entries.pop_front();
+    }
+    self.entries.push_back((method.into(), url.into(), res));
+  }
+
+  pub fn len(&self) -> usize {
+    self.entries.len()
+  }
+
+  pub fn last(&self) -> Option<&(String, String, ReplayResult)> {
+    self.entries.back()
+  }
+}
+
+impl Default for History {
+  fn default() -> Self {
+    Self::new()
+  }
+}

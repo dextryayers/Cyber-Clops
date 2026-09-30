@@ -1,5 +1,6 @@
 // Cyber-Clops GUI entry. SDL3 + OpenGL3 + Dear ImGui docking.
-// English only. No emdash.
+// English only. Accel badge loads from real clops-accel-probe JSON.
+// Tool runs spawn real clops-job verbs and stream JSONL rows.
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
 #include "imgui.h"
@@ -7,7 +8,46 @@
 #include "backends/imgui_impl_opengl3.h"
 #include "gui.h"
 #include <cstdio>
-#include <vector>
+#include <cstring>
+
+static std::string run_capture(const char* cmd) {
+  std::string out;
+  FILE* p = popen(cmd, "r");
+  if (!p) return out;
+  char buf[2048];
+  while (fgets(buf, sizeof(buf), p)) {
+    out += buf;
+    if (out.size() > 4096) break;
+  }
+  pclose(p);
+  return out;
+}
+
+static std::string json_str(const std::string& body, const char* key) {
+  auto p = body.find(key);
+  if (p == std::string::npos) return "";
+  p += std::strlen(key);
+  std::string o;
+  for (size_t i = p; i < body.size() && o.size() < 64; i++) {
+    if (body[i] == '"') break;
+    o += body[i];
+  }
+  return o;
+}
+
+static std::string load_accel() {
+  std::string body = run_capture("clops-accel-probe 2>/dev/null");
+  if (body.empty()) return "CPU: unknown | Backend: CPU only | GPU: none";
+  std::string cpu = json_str(body, "\"cpu\":\"");
+  std::string backend = json_str(body, "\"backend\":\"");
+  bool cuda = body.find("\"cuda\":true") != std::string::npos;
+  if (cpu.empty()) cpu = "unknown";
+  if (backend.empty()) backend = "CPU only";
+  char buf[192];
+  std::snprintf(buf, sizeof(buf), "CPU: %s | Backend: %s | GPU: %s", cpu.c_str(), backend.c_str(),
+    cuda ? "CUDA" : "none");
+  return buf;
+}
 
 int main(int, char**) {
   if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -34,12 +74,13 @@ int main(int, char**) {
   ImGui_ImplSDL3_InitForOpenGL(win, gl);
   ImGui_ImplOpenGL3_Init("#version 130");
 
-  AccelBadge accel{"x86_64 AVX2", "CPU", false, 0};
-  std::vector<PortRow> rows;
-  std::vector<std::string> logs = {"Ready. Scope: lab-only. Safe Mode: ON."};
-  char target[256] = "127.0.0.1";
-  int profile = 3;
-  int active_tool = 1;
+  AppState st;
+  st.accel_text = load_accel();
+  {
+    std::lock_guard<std::mutex> lk(st.mu);
+    st.logs.push_back("Ready. Scope: lab-only. Safe Mode: ON.");
+    st.logs.push_back(st.accel_text);
+  }
   bool run = true;
 
   while (run) {
@@ -47,20 +88,32 @@ int main(int, char**) {
     while (SDL_PollEvent(&e)) {
       ImGui_ImplSDL3_ProcessEvent(&e);
       if (e.type == SDL_EVENT_QUIT) run = false;
+      if (e.type == SDL_EVENT_KEY_DOWN) {
+        const SDL_KeyboardEvent& k = e.key;
+        bool ctrl = (k.mod & SDL_KMOD_CTRL) != 0;
+        if (ctrl && k.key == SDLK_K) st.palette_open = !st.palette_open;
+        if (ctrl && k.key == SDLK_RETURN) run_tool(st, st.active);
+        if (ctrl && k.key == SDLK_PERIOD) stop_jobs(st);
+      }
     }
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
     ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
-    panels_draw_topbar(accel, 0);
-    panels_draw_left_tree(active_tool);
-    panels_draw_center(active_tool, rows, target, profile);
-    panels_draw_inspector(rows.empty() ? nullptr : &rows[0]);
-    panels_draw_bottom(logs);
+    panels_draw_topbar(st);
+    panels_draw_left_tree(st);
+    panels_draw_center(st);
+    panels_draw_inspector(st);
+    panels_draw_bottom(st);
+    panels_draw_palette(st);
 
     ImGui::Render();
-    glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+    int w = 0, h = 0;
+    SDL_GetWindowSize(win, &w, &h);
+    io.DisplaySize.x = (float)w;
+    io.DisplaySize.y = (float)h;
+    glViewport(0, 0, w, h);
     glClearColor(0.04f, 0.05f, 0.06f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

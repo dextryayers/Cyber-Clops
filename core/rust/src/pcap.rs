@@ -19,6 +19,37 @@ fn u32le(b: &[u8]) -> u32 {
   (b[0] as u32) | ((b[1] as u32) << 8) | ((b[2] as u32) << 16) | ((b[3] as u32) << 24)
 }
 
+// Decode one DNS QNAME from offset 0 of a DNS section slice.
+// Returns name plus bytes consumed. No compression pointer follow, lab scope.
+fn dns_name(buf: &[u8]) -> Option<(String, usize)> {
+  let mut labels = Vec::new();
+  let mut i = 0;
+  while i < buf.len() {
+    let n = buf[i] as usize;
+    if n == 0 {
+      i += 1;
+      break;
+    }
+    // Compression pointers start with 0xC0. Skip them honestly.
+    if n & 0xC0 == 0xC0 {
+      i += 2;
+      break;
+    }
+    if n > 63 || i + 1 + n > buf.len() {
+      return None;
+    }
+    labels.push(String::from_utf8_lossy(&buf[i + 1..i + 1 + n]).to_string());
+    i += 1 + n;
+    if labels.len() > 16 {
+      break;
+    }
+  }
+  if labels.is_empty() {
+    return None;
+  }
+  Some((labels.join("."), i))
+}
+
 // Real PCAP parser. Supports DLT_EN10MB Ethernet plus raw IPv4.
 // Little endian magic d4 c3 b2 a1 and big endian a1 b2 c3 d4.
 pub fn parse_bytes(data: &[u8]) -> anyhow::Result<Vec<Flow>> {
@@ -99,7 +130,22 @@ fn decode_packet(pkt: &[u8], len: u32) -> Option<Flow> {
       }
       let sp = u16be(&rest[0..2]);
       let dp = u16be(&rest[2..4]);
-      let summary = if sp == 53 || dp == 53 { "DNS".into() } else { format!("UDP {sp} to {dp}") };
+      // UDP payload starts after 8 byte header. DNS header is 12 more bytes,
+      // then QNAME labels. Decode first query name when present.
+      let summary = if (sp == 53 || dp == 53) && rest.len() > 8 + 12 + 2 {
+        let dns = &rest[8..];
+        let qd: u16 = ((dns[4] as u16) << 8) | dns[5] as u16;
+        if qd >= 1 {
+          match dns_name(&dns[12..]) {
+            Some((name, _)) => format!("DNS query {name}"),
+            None => "DNS".into(),
+          }
+        } else {
+          "DNS".into()
+        }
+      } else {
+        format!("UDP {sp} to {dp}")
+      };
       Some(Flow { src, dst, proto: "UDP".into(), sport: sp, dport: dp, len, summary })
     }
     1 => Some(Flow { src, dst, proto: "ICMP".into(), sport: 0, dport: 0, len, summary: "ICMP".into() }),

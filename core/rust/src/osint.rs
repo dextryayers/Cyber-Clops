@@ -66,3 +66,28 @@ pub async fn wayback_hosts(domain: &str, timeout_ms: u64) -> Vec<String> {
   out.dedup();
   out.into_iter().take(200).collect()
 }
+
+// GitHub dork URL builder. No auth, no fetch. Opens in browser.
+// Keeps recon passive and rate free.
+pub fn github_dork_url(domain: &str, kind: &str) -> String {
+  let q = match kind {
+    "secrets" => format!("\"{domain}\" password OR secret OR api_key"),
+    "files" => format!("\"{domain}\" extension:env OR extension:pem"),
+    _ => format!("\"{domain}\""),
+  };
+  format!("https://github.com/search?q={}&type=code", url_encode_query(&q))
+}
+
+fn url_encode_query(s: &str) -> String {
+  let mut out = String::new();
+  for b in s.bytes() {
+    if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+      out.push(b as char);
+    } else if b == b' ' {
+      out.push('+');
+    } else {
+      out.push_str(&format!("%{b:02X}"));
+    }
+  }
+  out
+}

@@ -59,3 +59,28 @@ pub fn recon_chain(target: &str) -> Chain {
     ],
   }
 }
+
+// Branch helper for no code conditions. Example: continue only if found > N.
+pub fn meets_threshold(found: usize, min: usize) -> bool {
+  found >= min
+}
+
+// Real recon execution for a single target. Runs resolve plus top port scan
+// and stores results into vars for later steps. Polite timeouts throughout.
+pub async fn execute_recon(
+  target: &str,
+  timeout_ms: u64,
+) -> (Vec<String>, std::collections::HashMap<String, String>) {
+  let mut lines = Vec::new();
+  let mut vars = std::collections::HashMap::new();
+  vars.insert("target".to_string(), target.to_string());
+  let ips = crate::dns::resolve(target).await.unwrap_or_default();
+  lines.push(format!("resolved {} to {} ips", target, ips.len()));
+  vars.insert("ips".to_string(), ips.join(","));
+  let ports = [80u16, 443, 8080, 8443];
+  let found = crate::scan::scan_many(target, &ports, timeout_ms, 4).await;
+  let open: Vec<String> = found.iter().filter(|f| f.open).map(|f| f.port.to_string()).collect();
+  lines.push(format!("open ports: {}", open.join(",")));
+  vars.insert("open_ports".to_string(), open.join(","));
+  (lines, vars)
+}

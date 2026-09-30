@@ -76,6 +76,8 @@ pub async fn check(base_url: &str, timeout_ms: u64) -> Vec<MisFinding> {
         fix: "Add Content-Security-Policy with default-src".into(),
       });
     }
+    // Cookies
+    for v in h.get_all("set-cookie").iter() {
       let s = v.to_str().unwrap_or("").to_lowercase();
       if !s.contains("secure") || !s.contains("httponly") || !s.contains("samesite") {
         out.push(MisFinding {
@@ -118,6 +120,31 @@ pub async fn check(base_url: &str, timeout_ms: u64) -> Vec<MisFinding> {
               evidence: "ref: found".into(),
               fix: "Block .git from web root".into(),
             });
+          }
+        }
+      }
+    }
+  }
+  // 3. Directory listing probe on common asset paths, same host only
+  if let Ok(base) = reqwest::Url::parse(base_url) {
+    if let Some(host) = base.host_str() {
+      let scheme = base.scheme();
+      let port = base.port().map(|p| format!(":{p}")).unwrap_or_default();
+      for probe in ["/uploads/", "/files/", "/assets/"] {
+        let url = format!("{scheme}://{host}{port}{probe}");
+        if let Ok(r) = client.get(&url).send().await {
+          if r.status().as_u16() == 200 {
+            let b = r.text().await.unwrap_or_default();
+            if b.contains("Index of /") {
+              out.push(MisFinding {
+                check: "Directory listing".into(),
+                severity: "Low".into(),
+                cwe: "CWE-548".into(),
+                evidence: format!("Index of at {probe}"),
+                fix: "Disable autoindex".into(),
+              });
+              break;
+            }
           }
         }
       }

@@ -25,3 +25,16 @@ pub fn encode_base64(s: &str) -> String {
   use base64::Engine as E;
   E::encode(&base64::engine::general_purpose::STANDARD, s.as_bytes())
 }
+
+// Encode a generated shell for transport. none keeps raw,
+// base64 wraps with a decode pipe, url uses percent encoding.
+pub fn encode_shell(code: &str, how: &str) -> String {
+  match how {
+    "base64" => {
+      let b64 = encode_base64(code);
+      format!("echo {b64} | base64 -d | sh")
+    }
+    "url" => crate::codec::url_encode(code),
+    _ => code.to_string(),
+  }
+}

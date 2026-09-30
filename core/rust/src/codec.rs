@@ -74,6 +74,17 @@ pub fn html_escape(s: &str) -> String {
   s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
+// Unix timestamp to UTC string. Returns empty on out of range input.
+pub fn unix_to_utc(ts: i64) -> String {
+  use chrono::TimeZone;
+  chrono::Utc.timestamp_opt(ts, 0).single().map(|d| d.to_rfc3339()).unwrap_or_default()
+}
+
+// Random UUID v4 for lab tokens and request markers.
+pub fn new_uuid() -> String {
+  uuid::Uuid::new_v4().to_string()
+}
+
 // JWT decode without verify. Returns header and payload JSON strings.
 pub fn jwt_parse(token: &str) -> anyhow::Result<JwtInfo> {
   use base64::Engine as E;

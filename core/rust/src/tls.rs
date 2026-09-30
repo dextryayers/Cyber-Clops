@@ -15,6 +15,7 @@ pub struct TlsInfo {
 // Real TLS info via direct handshake and x509 parse.
 // v1: leaf cert only. Chain and cipher enum land in Phase 2.
 pub async fn analyze(host: &str, port: u16, timeout_ms: u64) -> anyhow::Result<TlsInfo> {
+  let _ = rustls::crypto::ring::default_provider().install_default();
   use tokio::net::TcpStream;
   use tokio::time::timeout;
   use x509_parser::prelude::FromDer;
@@ -81,3 +82,34 @@ pub async fn analyze(host: &str, port: u16, timeout_ms: u64) -> anyhow::Result<T
     grade,
   })
 }
+
+// Real protocol support probe. Tries each version with a short handshake.
+// Returns list like ["TLS1.2", "TLS1.3"]. Polite single attempt per version.
+pub async fn probe_protocols(host: &str, port: u16, timeout_ms: u64) -> Vec<String> {
+  let _ = rustls::crypto::ring::default_provider().install_default();
+  use tokio::net::TcpStream;
+  use tokio::time::timeout;
+  let mut out = Vec::new();
+  static V12: &[&rustls::SupportedProtocolVersion] = &[&rustls::version::TLS12];
+  static V13: &[&rustls::SupportedProtocolVersion] = &[&rustls::version::TLS13];
+  let versions: Vec<(&str, &[&rustls::SupportedProtocolVersion])> = vec![
+    ("TLS1.2", V12),
+    ("TLS1.3", V13),
+  ];
+  for (label, vers) in versions {
+    let addr = format!("{host}:{port}");
+    let Ok(conn) = timeout(std::time::Duration::from_millis(timeout_ms), TcpStream::connect(&addr)).await else { continue };
+    let Ok(stream) = conn else { continue };
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let builder = rustls::ClientConfig::builder_with_protocol_versions(vers);
+    let cfg = builder.with_root_certificates(roots).with_no_client_auth();
+    let connector = tokio_rustls::TlsConnector::from(std::sync::Arc::new(cfg));
+    let Ok(dns) = rustls_pki_types::ServerName::try_from(host.to_string()) else { continue };
+    if timeout(std::time::Duration::from_millis(timeout_ms), connector.connect(dns, stream)).await.is_ok() {
+      out.push(label.to_string());
+    }
+  }
+  out
+}
+

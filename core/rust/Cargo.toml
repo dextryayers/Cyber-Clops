@@ -26,7 +26,7 @@ sha1 = "0.10"
 sha2 = "0.10"
 hex = "0.4"
 base64 = "0.22"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-manual-roots", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json"] }
 hickory-resolver = { version = "0.24", features = ["tokio"] }
 anyhow = "1"
 thiserror = "2"
@@ -34,7 +34,7 @@ chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tokio-rustls = "0.26"
-rustls = "0.23"
+rustls = { version = "0.23", features = ["ring"] }
 rustls-pki-types = "1"
 webpki-roots = "0.26"
 jsonwebtoken = { version = "9", default-features = false }

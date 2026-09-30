@@ -73,6 +73,19 @@ fn guess_service(port: u16, banner: &str) -> (String, String) {
   ("unknown".into(), String::new())
 }
 
+// Refine HTTP service version with real GET. Called only for http-like ports to stay polite.
+pub async fn refine_http(host: &str, port: u16, timeout_ms: u64) -> (String, String) {
+  let scheme = if port == 443 || port == 8443 || port == 18443 { "https" } else { "http" };
+  let url = format!("{scheme}://{host}:{port}/");
+  match crate::http::fetch(&url, timeout_ms).await {
+    Ok(r) => {
+      let ver = if r.server.is_empty() { r.title.clone() } else if r.title.is_empty() { r.server.clone() } else { format!("{} | {}", r.server, r.title) };
+      ("http".to_string(), ver.chars().take(128).collect())
+    }
+    Err(_) => ("http".to_string(), String::new()),
+  }
+}
+
 pub async fn scan_many(host: &str, ports: &[u16], timeout_ms: u64, concurrency: usize) -> Vec<PortFinding> {
   use tokio::sync::Semaphore;
   use std::sync::Arc;

@@ -1,15 +1,22 @@
 pub mod accel;
 pub mod audit;
+pub mod dirbrute;
 pub mod dns;
 pub mod ffi;
+pub mod fingerprint;
 pub mod hash;
 pub mod http;
 pub mod jobs;
 pub mod lua;
 pub mod rate;
+pub mod repeater;
 pub mod scan;
 pub mod scope;
+pub mod secrets;
+pub mod spider;
 pub mod store;
+pub mod subdomain;
+pub mod takeover;
 pub mod tls;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

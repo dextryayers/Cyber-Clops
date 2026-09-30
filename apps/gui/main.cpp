@@ -23,10 +23,15 @@ static std::string run_capture(const char* cmd) {
   return out;
 }
 
-static std::string json_str(const std::string& body, const char* key) {
+static std::string json_str(const std::string& body, const char* name) {
+  // Tolerates pretty printed JSON with spaces around the colon.
+  std::string key = std::string("\"") + name + "\"";
   auto p = body.find(key);
   if (p == std::string::npos) return "";
-  p += std::strlen(key);
+  p += key.size();
+  while (p < body.size() && (body[p] == ' ' || body[p] == '\t' || body[p] == '\n' || body[p] == '\r' || body[p] == ':')) p++;
+  if (p >= body.size() || body[p] != '"') return "";
+  p++;
   std::string o;
   for (size_t i = p; i < body.size() && o.size() < 64; i++) {
     if (body[i] == '"') break;
@@ -38,8 +43,8 @@ static std::string json_str(const std::string& body, const char* key) {
 static std::string load_accel() {
   std::string body = run_capture("clops-accel-probe 2>/dev/null");
   if (body.empty()) return "CPU: unknown | Backend: CPU only | GPU: none";
-  std::string cpu = json_str(body, "\"cpu\":\"");
-  std::string backend = json_str(body, "\"backend\":\"");
+  std::string cpu = json_str(body, "cpu");
+  std::string backend = json_str(body, "backend");
   bool cuda = body.find("\"cuda\":true") != std::string::npos;
   if (cpu.empty()) cpu = "unknown";
   if (backend.empty()) backend = "CPU only";

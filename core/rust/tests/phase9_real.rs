@@ -464,3 +464,11 @@ async fn scan_many_refined_http_port_real() {
   assert!(f.open);
   assert!(f.version.contains("RefSrv") || f.version.contains("Ref18080"), "got {:?}", f.version);
 }
+
+#[test]
+fn pcap_fixture_file_real() {
+  let flows = clops_core::pcap::parse_file(std::path::Path::new("../../tests/fixtures/generated.pcap")).unwrap();
+  assert_eq!(flows.len(), 2);
+  assert!(flows.iter().any(|f| f.proto == "TCP" && f.dport == 80));
+  assert!(flows.iter().any(|f| f.summary.contains("lab.example.com")), "got {flows:?}");
+}

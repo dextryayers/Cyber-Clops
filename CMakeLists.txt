@@ -18,6 +18,11 @@ option(CL_OPS_BUILD_TESTS "Build native tests" ON)
 include(FetchContent)
 
 if(CL_OPS_BUILD_GUI)
+  # No sudo environments lack some X11 dev packages. XScrnSaver is
+  # optional for a security toolkit, so default it off when unset.
+  if(NOT DEFINED SDL_X11_XSCRNSAVER)
+    set(SDL_X11_XSCRNSAVER OFF)
+  endif()
   # SDL3 via FetchContent, no sudo needed.
   # Uses release-3.4.x for stability.
   FetchContent_Declare(

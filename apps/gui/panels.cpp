@@ -204,6 +204,8 @@ void panels_draw_topbar(AppState& st) {
 }
 
 void panels_draw_left_tree(AppState& st) {
+  ImGui::SetNextWindowPos(ImVec2(0, 24), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(260, 640), ImGuiCond_FirstUseEver);
   ImGui::Begin("Navigator");
   ImGui::Text("Targets");
   ImGui::Separator();
@@ -223,6 +225,8 @@ void panels_draw_left_tree(AppState& st) {
 
 void panels_draw_center(AppState& st) {
   const ToolMeta& tm = kTools[st.active];
+  ImGui::SetNextWindowPos(ImVec2(260, 24), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(840, 640), ImGuiCond_FirstUseEver);
   ImGui::Begin("Workspace");
   ImGui::Text("%s %s", tm.id, tm.name);
   ImGui::SameLine();
@@ -245,6 +249,8 @@ void panels_draw_center(AppState& st) {
 }
 
 void panels_draw_inspector(AppState& st) {
+  ImGui::SetNextWindowPos(ImVec2(1100, 24), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(300, 640), ImGuiCond_FirstUseEver);
   ImGui::Begin("Details");
   std::lock_guard<std::mutex> lk(st.mu);
   if (st.selected < 0 || st.selected >= (int)st.rows.size()) {
@@ -262,6 +268,8 @@ void panels_draw_inspector(AppState& st) {
 }
 
 void panels_draw_bottom(AppState& st) {
+  ImGui::SetNextWindowPos(ImVec2(0, 664), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(1400, 236), ImGuiCond_FirstUseEver);
   ImGui::Begin("Jobs / Logs / Audit");
   std::lock_guard<std::mutex> lk(st.mu);
   for (auto& j : st.jobs) {

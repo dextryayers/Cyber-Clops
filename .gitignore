@@ -1,3 +1,6 @@
+# ImGui runtime layout, per machine
+imgui.ini
+
 # Rust
 target/
 core/rust/target/

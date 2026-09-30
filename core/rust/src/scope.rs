@@ -18,9 +18,21 @@ impl Scope {
 
   pub fn is_allowed(&self, target: &str) -> bool {
     let t = target.trim().to_lowercase();
-    let host = t.split(':').next().unwrap_or(&t).to_string();
-    let host = host.trim_start_matches("http://").trim_start_matches("https://");
-    let host = host.split('/').next().unwrap_or(host);
+    // Strip scheme first so http://host:port keeps its host, not "http".
+    let no_scheme = t
+      .trim_start_matches("http://")
+      .trim_start_matches("https://");
+    let hostport = no_scheme.split('/').next().unwrap_or(no_scheme);
+    // Split host from port on the last colon to survive odd inputs.
+    let host = match hostport.rfind(':') {
+      Some(i) => &hostport[..i],
+      None => hostport,
+    };
+    // Bare IPv6 loopback without brackets.
+    let host = host.trim_matches(|c| c == '[' || c == ']');
+    if host.is_empty() {
+      return false;
+    }
     if self.domains.iter().any(|d| host == d || host.ends_with(&format!(".{d}"))) {
       return true;
     }
@@ -43,6 +55,13 @@ mod tests {
     let s = Scope::lab_only();
     assert!(s.is_allowed("127.0.0.1"));
     assert!(s.is_allowed("127.0.0.1:18080"));
+    assert!(s.is_allowed("http://127.0.0.1:18080"));
+    assert!(s.is_allowed("http://127.0.0.1:18080/admin"));
+    assert!(s.is_allowed("https://example.com/x"));
+    assert!(s.is_allowed("http://127.0.0.5:9/"));
+    assert!(!s.is_allowed("evil.example.net"));
+    assert!(!s.is_allowed("http://evil.example.net/"));
+    assert!(!s.is_allowed(""));
     assert!(s.is_allowed("example.com"));
     assert!(!s.is_allowed("evil.com"));
   }

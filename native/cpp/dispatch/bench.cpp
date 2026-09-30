@@ -3,6 +3,7 @@
 // Verified against "abc" vectors in the native test.
 #include <stdint.h>
 #include <string.h>
+#include <cstdio>
 #include <chrono>
 
 namespace {

@@ -9,6 +9,10 @@ license = "MIT"
 name = "clops_core"
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "clops-accel-probe"
+path = "src/bin/accel_probe.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -29,6 +33,10 @@ thiserror = "2"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
+tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pki-types = "1"
+webpki-roots = "0.26"
 jsonwebtoken = { version = "9", default-features = false }
 x509-parser = "0.16"
 

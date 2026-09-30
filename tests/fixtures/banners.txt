@@ -1,0 +1,4 @@
+SSH-2.0-OpenSSH_9.2 lab
+220 lab ftp ready
+HTTP/1.1 200 OK
+Server: ClopsLab/0.1

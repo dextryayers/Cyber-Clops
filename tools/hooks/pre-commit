@@ -1,15 +1,16 @@
 #!/bin/sh
-# Pre commit guard: reject emdash and emoji in UI strings and docs.
+# Pre commit guard: reject emdash and endash in UI strings and docs.
+# Uses unicode escapes so this file itself stays clean.
 # Install: cp tools/hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 set -e
 echo "[clops] checking for emdash..."
-if git diff --cached --name-only | xargs grep -l "—" 2>/dev/null; then
+if git diff --cached --name-only | xargs grep -lP "\x{2014}" 2>/dev/null; then
   echo "ERROR: emdash found. Replace with hyphen - or comma."
-  git diff --cached | grep -n "—" | head
+  git diff --cached | grep -nP "\x{2014}" | head
   exit 1
 fi
 echo "[clops] checking for endash..."
-if git diff --cached --name-only | xargs grep -l "–" 2>/dev/null; then
+if git diff --cached --name-only | xargs grep -lP "\x{2013}" 2>/dev/null; then
   echo "ERROR: endash found. Replace with hyphen -."
   exit 1
 fi

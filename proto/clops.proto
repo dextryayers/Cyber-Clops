@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package clops.v1;
+
+option go_package = "clops-worker/proto";
+
+// Contract for Go sidecar on 127.0.0.1 with per session token.
+// Phase 0 and 1 use JSON over HTTP with same fields.
+// Full gRPC codegen lands when protoc is available.
+
+service ClopsWorker {
+  rpc StartJob(StartJobReq) returns (StartJobResp);
+  rpc StreamResults(StreamReq) returns (stream ResultRow);
+  rpc PauseJob(JobId) returns (Ack);
+  rpc CancelJob(JobId) returns (Ack);
+}
+
+message StartJobReq {
+  string job_id = 1;
+  string kind = 2; // dir_brute, wordlist, fuzz
+  string base_url = 3;
+  repeated string wordlist = 4;
+  int32 concurrency = 5;
+  int32 timeout_ms = 6;
+  string session_token = 7;
+}
+
+message StartJobResp {
+  string job_id = 1;
+  bool accepted = 2;
+  string reason = 3;
+}
+
+message StreamReq {
+  string job_id = 1;
+}
+
+message ResultRow {
+  string job_id = 1;
+  string path = 2;
+  int32 status = 3;
+  int64 length = 4;
+  int64 time_ms = 5;
+  string redirect = 6;
+}
+
+message JobId {
+  string job_id = 1;
+}
+
+message Ack {
+  bool ok = 1;
+}

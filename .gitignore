@@ -1,0 +1,36 @@
+# Rust
+target/
+core/rust/target/
+
+# CMake
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Go
+workers/go/bin/
+
+# SQLite projects and caches
+*.sqlite
+*.sqlite-journal
+~/.cache/clops/
+
+# Logs
+*.log
+*.jsonl
+
+# PCAP
+*.pcap
+*.pcapng
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

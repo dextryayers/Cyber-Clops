@@ -1,0 +1,40 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "dev",
+      "displayName": "Dev CPU only",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CL_OPS_ENABLE_CUDA": "OFF",
+        "CL_OPS_ENABLE_HIP": "OFF",
+        "CL_OPS_ENABLE_OPENCL": "ON",
+        "CL_OPS_BUILD_GUI": "ON"
+      }
+    },
+    {
+      "name": "cuda",
+      "displayName": "Lab with CUDA",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cuda",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CL_OPS_ENABLE_CUDA": "ON",
+        "CL_OPS_ENABLE_HIP": "OFF",
+        "CL_OPS_BUILD_GUI": "ON"
+      }
+    },
+    {
+      "name": "headless",
+      "displayName": "Headless without GUI",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/headless",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CL_OPS_BUILD_GUI": "OFF"
+      }
+    }
+  ]
+}

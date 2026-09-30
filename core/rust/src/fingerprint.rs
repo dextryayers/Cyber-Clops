@@ -51,25 +51,31 @@ fn detect_tech(headers: &HashMap<String, String>, body: &str) -> Vec<String> {
   if h.contains("apache") {
     t.push("Apache".into());
   }
+  if h.contains("php") || b.contains("<?php") || h.contains("x-powered-by") && h.contains("php") {
+    t.push("PHP".into());
+  }
+  if b.contains("express") || h.contains("express") {
+    t.push("Express".into());
+  }
+  if b.contains("__next") || b.contains("_next/static") {
+    if !t.contains(&"React/Next".to_string()) {
+      t.push("Next.js".into());
+    }
+  }
+  if b.contains("wp-json") || b.contains("wp-includes") {
+    if !t.contains(&"WordPress".to_string()) {
+      t.push("WordPress".into());
+    }
+  }
   t.sort();
   t.dedup();
   t
 }
 
-// Real fingerprint via live fetch. Follows T05 contract.
+// Real fingerprint via one live fetch. Body is reused for tech detect.
 pub async fn fingerprint(url: &str, timeout_ms: u64) -> anyhow::Result<Fingerprint> {
   let r = crate::http::fetch(url, timeout_ms).await?;
-  // Need body for tech detect. Reuse fetch headers plus second body read is avoided:
-  // fetch already parsed title. For tech we use headers plus title as signal plus fresh body.
-  let c = reqwest::Client::builder()
-    .timeout(std::time::Duration::from_millis(timeout_ms))
-    .user_agent("Cyber-Clops/2.0")
-    .build()?;
-  let body = match c.get(url).send().await {
-    Ok(resp) => resp.text().await.unwrap_or_default(),
-    Err(_) => String::new(),
-  };
-  let tech = detect_tech(&r.headers, &body);
+  let tech = detect_tech(&r.headers, &r.body);
   let mut issues = Vec::new();
   let get = |k: &str| r.headers.iter().find(|(hk, _)| hk.to_lowercase() == k).map(|(_, v)| v.clone());
   if get("strict-transport-security").is_none() && url.starts_with("https") {
@@ -81,13 +87,19 @@ pub async fn fingerprint(url: &str, timeout_ms: u64) -> anyhow::Result<Fingerpri
   if get("x-frame-options").is_none() {
     issues.push(Finding { check: "Missing X-Frame-Options".into(), severity: "Low".into(), advice: "Add X-Frame-Options or frame-ancestors".into() });
   }
-  // Cookie flags from set-cookie headers
+  // Cookie flags from set-cookie headers. Multi values arrive newline joined.
   let mut cookies = Vec::new();
   for (k, v) in r.headers.iter() {
-    if k.to_lowercase() == "set-cookie" {
-      let parts: Vec<&str> = v.split(';').collect();
-      let name = parts.first().unwrap_or(&"").split('=').next().unwrap_or("").trim().to_string();
-      let low = v.to_lowercase();
+    if k.to_lowercase() != "set-cookie" {
+      continue;
+    }
+    for line in v.split('\n') {
+      let line = line.trim();
+      if line.is_empty() {
+        continue;
+      }
+      let name = line.split(';').next().unwrap_or("").split('=').next().unwrap_or("").trim().to_string();
+      let low = line.to_lowercase();
       cookies.push(CookieFlag {
         name,
         secure: low.contains("secure"),

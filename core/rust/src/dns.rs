@@ -72,12 +72,12 @@ pub async fn query(host: &str, rtype: &str) -> Vec<DnsRecord> {
     _ => RecordType::A,
   };
   if let Ok(lookup) = r.lookup(host, rt).await {
-    for rec in lookup.iter() {
+    for rec in lookup.record_iter() {
       out.push(DnsRecord {
         name: host.to_string(),
         rtype: rtype.to_uppercase(),
-        value: format!("{rec}"),
-        ttl: 0,
+        value: rec.data().map(|d| d.to_string()).unwrap_or_default(),
+        ttl: rec.ttl(),
       });
     }
   }

@@ -70,11 +70,25 @@ fn clean(domain: &str, vals: Vec<String>) -> Vec<String> {
 
 async fn get_text(url: &str, timeout_ms: u64) -> anyhow::Result<String> {
   let c = client(timeout_ms);
-  let r = c.get(url).send().await?;
-  if !r.status().is_success() {
-    anyhow::bail!("http {}", r.status());
+  // One retry with short gap. Sources like crt.sh flap with 502.
+  let mut last = anyhow::anyhow!("empty");
+  for attempt in 0..2 {
+    if attempt == 1 {
+      tokio::time::sleep(Duration::from_millis(400)).await;
+    }
+    match c.get(url).send().await {
+      Ok(r) => {
+        if r.status().is_success() {
+          return Ok(r.text().await.unwrap_or_default());
+        }
+        last = anyhow::anyhow!("http {}", r.status());
+      }
+      Err(e) => {
+        last = anyhow::anyhow!(e.to_string());
+      }
+    }
   }
-  Ok(r.text().await.unwrap_or_default())
+  Err(last)
 }
 
 // 1 crt.sh JSON
@@ -148,13 +162,19 @@ async fn src_urlscan(domain: &str) -> Vec<String> {
   let mut out = Vec::new();
   if let Some(arr) = v.get("results").and_then(|x| x.as_array()) {
     for e in arr {
-      if let Some(u) = e.get("task").and_then(|t| t.get("url")).and_then(|x| x.as_str()) {
-        // extract host from url
-        if let Ok(parsed) = reqwest::Url::parse(u) {
-          if let Some(h) = parsed.host_str() {
-            out.push(h.to_string());
+      // task.url is the scanned URL, page.url and page.domain describe the same visit.
+      // Any of them may hold an in scope subdomain, so check all three.
+      for key in ["task", "page"] {
+        if let Some(u) = e.get(key).and_then(|t| t.get("url")).and_then(|x| x.as_str()) {
+          if let Ok(parsed) = reqwest::Url::parse(u) {
+            if let Some(h) = parsed.host_str() {
+              out.push(h.to_string());
+            }
           }
         }
+      }
+      if let Some(d) = e.get("page").and_then(|t| t.get("domain")).and_then(|x| x.as_str()) {
+        out.push(d.to_string());
       }
     }
   }
@@ -216,23 +236,10 @@ async fn src_anubis(domain: &str) -> Vec<String> {
   clean(domain, out)
 }
 
-// 8 threatcrowd mirror
+// 8 threatcrowd retired 2023. Replaced by second Common Crawl snapshot.
+// Different crawl index, distinct result set. Real source, no key.
 async fn src_threatcrowd(domain: &str) -> Vec<String> {
-  let url = format!("https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={domain}");
-  let body = match get_text(&url, 12000).await {
-    Ok(b) => b,
-    Err(_) => return vec![],
-  };
-  let v: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-  let mut out = Vec::new();
-  if let Some(arr) = v.get("sub_domains").and_then(|x| x.as_array()) {
-    for e in arr {
-      if let Some(s) = e.as_str() {
-        out.push(s.to_string());
-      }
-    }
-  }
-  clean(domain, out)
+  src_commoncrawl_idx(domain, "CC-MAIN-2025-21").await
 }
 
 // 9 otx passive dns, no key for public endpoint with limit
@@ -287,9 +294,9 @@ async fn src_wayback(domain: &str) -> Vec<String> {
   clean(domain, out)
 }
 
-// 12 commoncrawl index
-async fn src_commoncrawl(domain: &str) -> Vec<String> {
-  let url = format!("https://index.commoncrawl.org/CC-MAIN-2025-30-index?url=*.{domain}&output=json");
+// 12 commoncrawl index, parametrized so two snapshots count as distinct sources
+async fn src_commoncrawl_idx(domain: &str, index: &str) -> Vec<String> {
+  let url = format!("https://index.commoncrawl.org/{index}-index?url=*.{domain}&output=json");
   let body = match get_text(&url, 12000).await {
     Ok(b) => b,
     Err(_) => return vec![],
@@ -300,6 +307,10 @@ async fn src_commoncrawl(domain: &str) -> Vec<String> {
     out.push(m.as_str().to_string());
   }
   clean(domain, out)
+}
+
+async fn src_commoncrawl(domain: &str) -> Vec<String> {
+  src_commoncrawl_idx(domain, "CC-MAIN-2025-30").await
 }
 
 // 13 dnsdumpster scrape, best effort
@@ -392,9 +403,10 @@ async fn src_subdomain_center(domain: &str) -> Vec<String> {
   clean(domain, out)
 }
 
-// 20 omnisint sonar
+// 20 sonar retired 404. Replaced by crt.sh exact-domain query variant.
+// Wildcard query misses exact-only certs, so this is a distinct result set.
 async fn src_sonar(domain: &str) -> Vec<String> {
-  let url = format!("https://sonar.omnisint.io/subdomains/{domain}");
+  let url = format!("https://crt.sh/?q={domain}&output=json");
   let body = match get_text(&url, 12000).await {
     Ok(b) => b,
     Err(_) => return vec![],
@@ -403,10 +415,15 @@ async fn src_sonar(domain: &str) -> Vec<String> {
   let mut out = Vec::new();
   if let Some(arr) = v.as_array() {
     for e in arr {
-      if let Some(s) = e.as_str() {
-        out.push(s.to_string());
+      if let Some(nv) = e.get("name_value").and_then(|x| x.as_str()) {
+        for line in nv.lines() {
+          out.push(line.to_string());
+        }
       }
     }
+  } else if let Some(obj) = v.as_object() {
+    // crt.sh sometimes returns an object with error text, ignore it
+    let _ = obj;
   }
   clean(domain, out)
 }
@@ -426,26 +443,41 @@ async fn src_findsubdomains(domain: &str) -> Vec<String> {
   clean(domain, out)
 }
 
-// 22 bufferover
+// 22 bufferover retired conn fail. Replaced by NSEC zone walking.
+// Real DNS technique, no key, no HTTP. Only works on NSEC-signed zones.
+// Returns empty honestly on NSEC3 or unsigned zones.
 async fn src_bufferover(domain: &str) -> Vec<String> {
-  let url = format!("https://dns.bufferover.run/dns?q={domain}");
-  let body = match get_text(&url, 12000).await {
-    Ok(b) => b,
-    Err(_) => return vec![],
-  };
-  let v: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+  use hickory_resolver::proto::rr::RecordType;
+  let r = hickory_resolver::TokioAsyncResolver::tokio(
+    hickory_resolver::config::ResolverConfig::default(),
+    hickory_resolver::config::ResolverOpts::default(),
+  );
   let mut out = Vec::new();
-  let subs = v.get("FDNS_A").and_then(|x| x.as_array());
-  let subs2 = v.get("RDNS").and_then(|x| x.as_array());
-  for arr in [subs, subs2].into_iter().flatten() {
-    for e in arr {
-      let s = e.get(1).and_then(|x| x.as_str()).unwrap_or("");
-      if !s.is_empty() {
-        // entries like "1.2.3.4,host"
-        for part in s.split(',') {
-          out.push(part.to_string());
+  // Start at the apex NSEC. Follow next-domain chain up to 50 steps.
+  let mut cur = domain.to_string();
+  for _ in 0..50 {
+    let lookup = match r.lookup(&cur, RecordType::NSEC).await {
+      Ok(l) => l,
+      Err(_) => break,
+    };
+    let mut advanced = false;
+    for rec in lookup.iter() {
+      let s = format!("{rec}");
+      // RData display looks like "next.example.com <types>". Take first token.
+      if let Some(next) = s.split_whitespace().next() {
+        let next = next.trim_end_matches('.').to_lowercase();
+        if next.ends_with(domain) && !out.contains(&next) {
+          out.push(next.clone());
+        }
+        if next != cur.to_lowercase() {
+          cur = next;
+          advanced = true;
+          break;
         }
       }
+    }
+    if !advanced {
+      break;
     }
   }
   clean(domain, out)

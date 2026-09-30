@@ -9,11 +9,14 @@ pub struct TlsInfo {
   pub issuer: String,
   pub days_left: i64,
   pub tls_version: String,
+  pub chain_len: usize,
+  pub hsts: String,
   pub grade: String,
 }
 
 // Real TLS info via direct handshake and x509 parse.
-// v1: leaf cert only. Chain and cipher enum land in Phase 2.
+// Leaf is parsed fully. Intermediates are counted for chain length.
+// Cipher offer enum stays out of scope for rustls client builds.
 pub async fn analyze(host: &str, port: u16, timeout_ms: u64) -> anyhow::Result<TlsInfo> {
   let _ = rustls::crypto::ring::default_provider().install_default();
   use tokio::net::TcpStream;
@@ -71,6 +74,23 @@ pub async fn analyze(host: &str, port: u16, timeout_ms: u64) -> anyhow::Result<T
   }
   .to_string();
 
+  // HSTS is an HTTP header, not TLS. One best effort HTTPS fetch keeps
+  // the analyzer honest about transport security instead of guessing.
+  let hsts = if port == 443 || port == 8443 {
+    crate::http::fetch(&format!("https://{host}:{port}/"), timeout_ms / 2 + 1000)
+      .await
+      .ok()
+      .and_then(|r| {
+        r.headers
+          .iter()
+          .find(|(k, _)| k.to_lowercase() == "strict-transport-security")
+          .map(|(_, v)| v.clone())
+      })
+      .unwrap_or_default()
+  } else {
+    String::new()
+  };
+
   Ok(TlsInfo {
     host: host.into(),
     port,
@@ -79,6 +99,8 @@ pub async fn analyze(host: &str, port: u16, timeout_ms: u64) -> anyhow::Result<T
     issuer,
     days_left,
     tls_version: format!("{:?}", tls.get_ref().1.protocol_version().unwrap_or(rustls::ProtocolVersion::TLSv1_2)),
+    chain_len: certs.len(),
+    hsts,
     grade,
   })
 }

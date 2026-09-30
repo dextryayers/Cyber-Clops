@@ -108,3 +108,75 @@ pub async fn scan_many(host: &str, ports: &[u16], timeout_ms: u64, concurrency: 
   out.sort_by_key(|f| f.port);
   out
 }
+
+// Live variant. Sends each finding the moment its probe completes.
+// UI renders rows as they arrive instead of waiting for the full range.
+pub async fn scan_many_stream(
+  host: &str,
+  ports: &[u16],
+  timeout_ms: u64,
+  concurrency: usize,
+  tx: tokio::sync::mpsc::Sender<PortFinding>,
+) {
+  use tokio::sync::Semaphore;
+  use std::sync::Arc;
+  let sem = Arc::new(Semaphore::new(concurrency.max(1)));
+  let mut handles = Vec::new();
+  for &p in ports {
+    let h = host.to_string();
+    let s = sem.clone();
+    let t = tx.clone();
+    handles.push(tokio::spawn(async move {
+      let _permit = s.acquire_owned().await.unwrap();
+      let f = scan_one(&h, p, timeout_ms).await;
+      let _ = t.send(f).await;
+    }));
+  }
+  for h in handles {
+    let _ = h.await;
+  }
+}
+
+fn is_http_like(port: u16) -> bool {
+  matches!(port, 80 | 8000 | 8080 | 18080 | 443 | 8443 | 18443 | 3000 | 5000 | 9000)
+}
+
+// Refined variant. Open http-like ports with empty version get one real
+// GET each via refine_http. Non-HTTP ports are untouched. Bounded by
+// refine_concurrency so a wide range of web servers cannot stampede the target.
+pub async fn scan_many_refined(
+  host: &str,
+  ports: &[u16],
+  timeout_ms: u64,
+  concurrency: usize,
+  refine_concurrency: usize,
+) -> Vec<PortFinding> {
+  let mut out = scan_many(host, ports, timeout_ms, concurrency).await;
+  use tokio::sync::Semaphore;
+  use std::sync::Arc;
+  let sem = Arc::new(Semaphore::new(refine_concurrency.max(1).min(16)));
+  let targets: Vec<u16> = out
+    .iter()
+    .filter(|f| f.open && f.version.is_empty() && is_http_like(f.port))
+    .map(|f| f.port)
+    .collect();
+  let mut handles = Vec::new();
+  for port in targets {
+    let h = host.to_string();
+    let s = sem.clone();
+    handles.push(tokio::spawn(async move {
+      let _permit = s.acquire_owned().await.unwrap();
+      let (svc, ver) = refine_http(&h, port, timeout_ms / 2 + 1000).await;
+      (port, svc, ver)
+    }));
+  }
+  for h in handles {
+    if let Ok((port, svc, ver)) = h.await {
+      if let Some(f) = out.iter_mut().find(|f| f.port == port) {
+        f.service = svc;
+        f.version = ver;
+      }
+    }
+  }
+  out
+}

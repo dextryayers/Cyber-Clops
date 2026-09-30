@@ -132,3 +132,101 @@ pub async fn check(
   }
   out
 }
+
+// POST form variant. Same safe checks against form params.
+// Sends application/x-www-form-urlencoded bodies to base_url.
+pub async fn check_post(
+  base_url: &str,
+  params: &[String],
+  timeout_ms: u64,
+  allow_time: bool,
+) -> Vec<SqliFinding> {
+  let client = reqwest::Client::builder()
+    .timeout(std::time::Duration::from_millis(timeout_ms))
+    .user_agent("Cyber-Clops/2.0")
+    .build()
+    .unwrap();
+  let post = |form: Vec<(String, String)>| {
+    let client = client.clone();
+    let url = base_url.to_string();
+    async move {
+      let map: std::collections::HashMap<String, String> = form.into_iter().collect();
+      match client.post(&url).form(&map).send().await {
+        Ok(r) => r.text().await.unwrap_or_default(),
+        Err(_) => String::new(),
+      }
+    }
+  };
+  let mut out = Vec::new();
+  for param in params {
+    let base_form: Vec<(String, String)> = params.iter().map(|p| (p.clone(), "1".to_string())).collect();
+    let base_body = post(base_form.clone()).await;
+    // Error based
+    let mut f1 = base_form.clone();
+    for (k, v) in f1.iter_mut() {
+      if k == param {
+        *v = format!("{v}'");
+      }
+    }
+    let b1 = post(f1.clone()).await;
+    for (db, sig) in error_sigs() {
+      if b1.contains(sig) && !base_body.contains(sig) {
+        out.push(SqliFinding {
+          param: param.clone(),
+          kind: format!("error-based {db} via POST"),
+          confidence: "Medium".into(),
+          evidence: format!("sig {sig}"),
+        });
+        break;
+      }
+    }
+    // Boolean via POST
+    let mut ft = base_form.clone();
+    for (k, v) in ft.iter_mut() {
+      if k == param {
+        *v = "1' AND '1'='1".to_string();
+      }
+    }
+    let mut ff = base_form.clone();
+    for (k, v) in ff.iter_mut() {
+      if k == param {
+        *v = "1' AND '1'='2".to_string();
+      }
+    }
+    let bt = post(ft.clone()).await;
+    let bf = post(ff.clone()).await;
+    if !bt.is_empty() && !bf.is_empty() {
+      let ht = crate::hash::md5_hex(&bt);
+      let hf = crate::hash::md5_hex(&bf);
+      let hb = crate::hash::md5_hex(&base_body);
+      if ((ht == hb && hf != hb) || (ht != hf && (bt.len() as i64 - bf.len() as i64).abs() > 8)) && ht != hf {
+        out.push(SqliFinding {
+          param: param.clone(),
+          kind: "boolean-blind via POST".into(),
+          confidence: "Low".into(),
+          evidence: format!("len true {} vs false {}", bt.len(), bf.len()),
+        });
+      }
+    }
+    if allow_time {
+      let mut ftime = base_form.clone();
+      for (k, v) in ftime.iter_mut() {
+        if k == param {
+          *v = "' OR SLEEP(2)-- -".to_string();
+        }
+      }
+      let t0 = std::time::Instant::now();
+      let _ = post(ftime.clone()).await;
+      let dt = t0.elapsed().as_millis();
+      if dt >= 1800 && dt < 8000 {
+        out.push(SqliFinding {
+          param: param.clone(),
+          kind: "time-based via POST".into(),
+          confidence: "Low".into(),
+          evidence: format!("delay {dt}ms"),
+        });
+      }
+    }
+  }
+  out
+}

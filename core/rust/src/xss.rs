@@ -5,6 +5,7 @@ pub struct XssFinding {
   pub param: String,
   pub context: String,
   pub confidence: String,
+  pub encoded: bool,
   pub evidence: String,
 }
 
@@ -79,13 +80,17 @@ pub async fn check(base_url: &str, params: &[String], timeout_ms: u64) -> Vec<Xs
     let c2 = context_of(&b2, m2);
     // Both markers must reflect in the same context. Single reflection is not enough.
     if c1 != "not-reflected" && c1 == c2 {
-      // Encoding check: raw vs encoded
+      // Encoding probe: angle brackets echoed raw means unencoded sink.
+      let probe = inject(base_url, param, "<clopsenc>");
+      let bp = fetch(&client, &probe).await;
+      let encoded = !(bp.contains("<clopsenc>"));
       let raw = b1.contains(m1);
-      let conf = if raw { "Medium" } else { "Low" };
+      let conf = if raw && !encoded { "Medium" } else { "Low" };
       out.push(XssFinding {
         param: param.clone(),
         context: c1,
         confidence: conf.into(),
+        encoded,
         evidence: format!("double send {m1} and {m2}"),
       });
     }

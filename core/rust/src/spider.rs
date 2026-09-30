@@ -67,9 +67,33 @@ fn extract_forms(url: &str, body: &str) -> Vec<Form> {
   out
 }
 
-// Real spider. Same host only unless host is in scope list.
-// Depth max 3, pages max 2000 by default via args.
+// Real spider. Same host only. Depth limited, robots Disallow respected.
 pub async fn crawl(seed: &str, max_pages: usize, timeout_ms: u64) -> (Vec<Page>, Vec<Form>) {
+  crawl_depth(seed, max_pages, 3, timeout_ms).await
+}
+
+// Parse Disallow paths from a robots.txt body. Global rules only, no per agent split.
+fn robots_disallow(body: &str) -> Vec<String> {
+  body
+    .lines()
+    .filter_map(|l| {
+      let t = l.trim();
+      if t.to_lowercase().starts_with("disallow:") {
+        Some(t[9..].trim().to_string())
+      } else {
+        None
+      }
+    })
+    .filter(|p| !p.is_empty())
+    .collect()
+}
+
+pub async fn crawl_depth(
+  seed: &str,
+  max_pages: usize,
+  max_depth: usize,
+  timeout_ms: u64,
+) -> (Vec<Page>, Vec<Form>) {
   let client = reqwest::Client::builder()
     .timeout(std::time::Duration::from_millis(timeout_ms))
     .redirect(reqwest::redirect::Policy::limited(3))
@@ -81,11 +105,29 @@ pub async fn crawl(seed: &str, max_pages: usize, timeout_ms: u64) -> (Vec<Page>,
     Err(_) => return (vec![], vec![]),
   };
   let host = seed_url.host_str().unwrap_or("").to_string();
+  // Fetch robots.txt first so Disallow is known before link follow.
+  let mut disallow: Vec<String> = Vec::new();
+  if let Ok(robots_url) = seed_url.join("/robots.txt") {
+    if let Ok(resp) = client.get(robots_url).send().await {
+      if resp.status().as_u16() == 200 {
+        let body = resp.text().await.unwrap_or_default();
+        disallow = robots_disallow(&body);
+      }
+    }
+  }
+  let blocked = |link: &str| -> bool {
+    if let Ok(u) = reqwest::Url::parse(link) {
+      let path = u.path();
+      disallow.iter().any(|d| path.starts_with(d))
+    } else {
+      false
+    }
+  };
   let mut seen = HashSet::new();
-  let mut queue = vec![seed.to_string()];
+  let mut queue: Vec<(String, usize)> = vec![(seed.to_string(), 0)];
   let mut pages = Vec::new();
   let mut forms = Vec::new();
-  while let Some(url) = queue.pop() {
+  while let Some((url, depth)) = queue.pop() {
     if pages.len() >= max_pages || !seen.insert(url.clone()) {
       continue;
     }
@@ -112,21 +154,24 @@ pub async fn crawl(seed: &str, max_pages: usize, timeout_ms: u64) -> (Vec<Page>,
     if pages.len() > max_pages {
       break;
     }
-    for link in extract_links(&url, &body) {
-      if let Ok(u) = reqwest::Url::parse(&link) {
-        if u.host_str().unwrap_or("") == host && !seen.contains(&link) && queue.len() < max_pages {
-          queue.push(link);
+    if depth < max_depth {
+      for link in extract_links(&url, &body) {
+        if blocked(&link) {
+          continue;
+        }
+        if let Ok(u) = reqwest::Url::parse(&link) {
+          if u.host_str().unwrap_or("") == host && !seen.contains(&link) && queue.len() < max_pages {
+            queue.push((link, depth + 1));
+          }
         }
       }
     }
-    // sitemap and robots only on first page, preserve port
+    // sitemap only on first page, preserve port. robots.txt already fetched.
     if pages.len() == 1 {
-      for extra in ["/sitemap.xml", "/robots.txt"] {
-        if let Ok(abs) = seed_url.join(extra) {
-          let s = abs.to_string();
-          if !seen.contains(&s) {
-            queue.push(s);
-          }
+      if let Ok(abs) = seed_url.join("/sitemap.xml") {
+        let s = abs.to_string();
+        if !seen.contains(&s) {
+          queue.push((s, depth + 1));
         }
       }
     }

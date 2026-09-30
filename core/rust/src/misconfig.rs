@@ -53,8 +53,29 @@ pub async fn check(base_url: &str, timeout_ms: u64) -> Vec<MisFinding> {
         fix: "Add X-Frame-Options DENY or CSP frame-ancestors".into(),
       });
     }
-    // Cookies
-    for v in h.get_all("set-cookie").iter() {
+    // HSTS explicit: only meaningful on HTTPS, flag when absent
+    let hsts = h.get("strict-transport-security").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    if hsts.is_empty() {
+      // Determine scheme from base_url. Plain http sites get Info, https get Low.
+      let sev = if base_url.starts_with("https") { "Low" } else { "Info" };
+      out.push(MisFinding {
+        check: "Missing HSTS".into(),
+        severity: sev.into(),
+        cwe: "CWE-319".into(),
+        evidence: "no Strict-Transport-Security".into(),
+        fix: "Add Strict-Transport-Security with max-age".into(),
+      });
+    }
+    // CSP explicit
+    if csp.is_empty() {
+      out.push(MisFinding {
+        check: "Missing CSP".into(),
+        severity: "Low".into(),
+        cwe: "CWE-1021".into(),
+        evidence: "no Content-Security-Policy".into(),
+        fix: "Add Content-Security-Policy with default-src".into(),
+      });
+    }
       let s = v.to_str().unwrap_or("").to_lowercase();
       if !s.contains("secure") || !s.contains("httponly") || !s.contains("samesite") {
         out.push(MisFinding {

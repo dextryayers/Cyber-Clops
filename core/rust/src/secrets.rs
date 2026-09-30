@@ -35,6 +35,9 @@ pub fn extract(body: &str, location: &str) -> (Vec<Endpoint>, Vec<SecretFinding>
     ("Google API", r"AIza[0-9A-Za-z\-_]{30,}", "Medium"),
     ("Private key", r"-----BEGIN (?:RSA )?PRIVATE KEY-----", "High"),
     ("JWT", r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}", "Medium"),
+    ("Twilio SID", r"AC[a-z0-9]{32}", "Medium"),
+    ("Mailgun key", r"key-[a-z0-9]{32}", "Medium"),
+    ("OpenAI key", r"sk-[A-Za-z0-9]{20,}", "Medium"),
   ];
   let mut secrets = Vec::new();
   for (kind, pat, conf) in patterns {
